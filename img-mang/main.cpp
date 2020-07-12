@@ -35,20 +35,17 @@ int main(int argc, char** argv )
         }
         
         if(*argv[1]== '1'){
-            if(myrank==0){
-                
-                saveImage(img,"1");
-                
-            }
+            saveImage(newimg,"1");
         }
         else if(*argv[1]== '2'){
-            
+            saveImage(newimg,"2");
         }
         else if(*argv[1]== '3'){
+            saveImage(newimg,"3");
         }
         else{
-            
-        
+            cout<<"La opcion ingresada no es valida..."<<endl;
+            return EXIT_FAILURE;
         }
         
         MPI_Finalize();
