@@ -14,7 +14,7 @@ using namespace cv;
 using namespace std;
 
 void saveImage(Mat image, string operation);
-
+float gaussian(int x, int y);
 int main(int argc, char** argv )
 {
     
@@ -32,16 +32,23 @@ int main(int argc, char** argv )
         if(myrank == 0){
             string path = argv[2];
             img = imread(path,1);
+            newimg = imread(path,1);
         }
         
         if(*argv[1]== '1'){
-            saveImage(newimg,"1");
+            if(myrank == 0){
+                GaussianBlur(img,newimg,Size(5,5),7,7);
+                saveImage(newimg,"1");
+            }
         }
         else if(*argv[1]== '2'){
-            saveImage(newimg,"2");
+            if(myrank == 0){
+                cvtColor(img,newimg,COLOR_BGR2GRAY);
+                saveImage(newimg,"2");
+            }
         }
         else if(*argv[1]== '3'){
-            saveImage(newimg,"3");
+            //saveImage(newimg,"3");
         }
         else{
             cout<<"La opcion ingresada no es valida..."<<endl;
@@ -64,6 +71,5 @@ void saveImage(Mat image, string operation){
     tstruct = *localtime(&now);
     strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", &tstruct);
     string date(buf);
-    cout<<"date:"<<date<<endl;
     imwrite("/media/compartida/programa_"+operation+"_"+date+".png", image);
 }
