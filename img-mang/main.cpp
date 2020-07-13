@@ -18,6 +18,7 @@ float kernel[5][5];
 void saveImage(Mat image, string operation);
 void getKernel();
 float gauss(int centerx,int centery, Mat image,int minx, int miny, int maxx, int maxy, int channel);
+void RGB2GRAYS(Mat src, Mat dst,int minx, int miny, int maxx, int maxy);
 int main(int argc, char** argv )
 {
     
@@ -54,7 +55,7 @@ int main(int argc, char** argv )
         }
         else if(*argv[1]== '2'){
             if(myrank == 0){
-                cvtColor(img,newimg,COLOR_BGR2GRAY);
+                RGB2GRAYS(img, newimg, 0, 0, img.cols, img.rows);
                 saveImage(newimg,"2");
             }
         }
@@ -104,6 +105,17 @@ void getKernel(){
         for(int j = 0; j<5; j++){
             float expo = exp(-1*((pow(i-2,2)+pow(j-2,2))/(2*pow(1.5,2))));
             kernel[i][j]=expo/(2*3.1416*pow(1.5,2));
+        }
+    }
+}
+
+void RGB2GRAYS(Mat src, Mat dst,int minx, int miny, int maxx, int maxy){
+    for(int x = minx; x < maxx; x++){
+        for(int y = miny; y < maxy; y++){
+            float promedio = (src.at<Vec3b>(y,x)[0] + src.at<Vec3b>(y,x)[1] + src.at<Vec3b>(y,x)[2])/3
+            dst.at<Vec3b>(y,x)[0] = promedio;
+            dst.at<Vec3b>(y,x)[1] = promedio;
+            dst.at<Vec3b>(y,x)[2] = promedio;
         }
     }
 }
