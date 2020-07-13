@@ -9,12 +9,15 @@
 #include <string>
 #include <vector>
 #include <ctime>
+#include <cmath>
 
 using namespace cv;
 using namespace std;
 
+float kernel[5][5];
 void saveImage(Mat image, string operation);
-
+void getKernel();
+float gauss(int centerx,int centery, Mat image,int minx, int miny, int maxx, int maxy, int channel);
 int main(int argc, char** argv )
 {
     
@@ -32,16 +35,31 @@ int main(int argc, char** argv )
         if(myrank == 0){
             string path = argv[2];
             img = imread(path,1);
+            newimg = imread(path,1);
+            
         }
         
         if(*argv[1]== '1'){
-            saveImage(newimg,"1");
+            if(myrank == 0){
+                getKernel();
+                for(int i = 0 ; i < img.rows ; i++){
+                    for(int j = 0 ; j < img.cols ; j++){
+                        for(int k = 0; k < 3; k++){
+                            newimg.at<Vec3b>(i,j)[k] = gauss(j,i,img,0,0,img.cols,img.rows,k);
+                        }
+                    }
+                }
+                saveImage(newimg,"1");
+            }
         }
         else if(*argv[1]== '2'){
-            saveImage(newimg,"2");
+            if(myrank == 0){
+                cvtColor(img,newimg,COLOR_BGR2GRAY);
+                saveImage(newimg,"2");
+            }
         }
         else if(*argv[1]== '3'){
-            saveImage(newimg,"3");
+            //saveImage(newimg,"3");
         }
         else{
             cout<<"La opcion ingresada no es valida..."<<endl;
@@ -64,6 +82,28 @@ void saveImage(Mat image, string operation){
     tstruct = *localtime(&now);
     strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", &tstruct);
     string date(buf);
-    cout<<"date:"<<date<<endl;
     imwrite("/media/compartida/programa_"+operation+"_"+date+".png", image);
+}
+float gauss(int centerx,int centery, Mat image,int minx, int miny, int maxx, int maxy, int channel){
+    float gaussBlur = 0;
+    for(int x = 0; x<5; x++){
+        if(centerx+x-2>=minx && centerx+x-2<maxx){
+            for(int y = 0; y<5; y++){
+                if(centery+y-2>=miny && centery+y-2 <maxy){
+                    gaussBlur += image.at<Vec3b>(centery+y-2,centerx+x-2)[channel]*kernel[y][x];
+                }
+            }
+        }
+        
+    }
+    return gaussBlur;
+}
+
+void getKernel(){
+    for(int i = 0; i<5; i++){
+        for(int j = 0; j<5; j++){
+            float expo = exp(-1*((pow(i-2,2)+pow(j-2,2))/(2*pow(1.5,2))));
+            kernel[i][j]=expo/(2*3.1416*pow(1.5,2));
+        }
+    }
 }
