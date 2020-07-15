@@ -23,8 +23,39 @@ int rangeMin, rangeMax;
  * @param operation nombre de la operacion
 */
 void saveImage(Mat image, string operation);
+/**
+ * Función que copia un segmento de una imagen para pegarla en otra imagen
+ * @param src Imagen a la que se le realiza la copia
+ * @param dst Imagen destino donde se guarda la copia
+ * @param minx Inicio de la dimension x de la copia
+ * @param miny Inicio de la dimension y de la copia
+ * @param maxx Final de la dimension x de la copia
+ * @param maxy Final de la dimension y de la copia
+*/
 void copyTo(Mat src, Mat dst, int minx, int miny, int maxx, int maxy);
+/**
+ * Función que recibe un segmento, o una imagen y la mezcla en la imagen destino, segun el proceso y la cantidad de procesadores es la posicion donde se implanta
+ * @param src Segmento de la imagen total
+ * @param dst Imagen total
+ * @param proceso Proceso actual
+ * @param procesadores Cantidad de procesos totales
+*/
 void join(Mat src, Mat dst,int proceso, int procesadores);
+
+/**
+ * Función que envia una imagen a un destinatario
+ * @param imgToSend Es la imagen a enviar
+ * @param dst Es el rango del destinatario a enviar
+*/
+void sendMsg(Mat imgToSend, int dst);
+
+/**
+ * Función que recibe la imagen de un destinatario
+ * @param imgToRecv Es donde se guardará la imagen recebida
+ * @param src Es el destinatario que envia la imagen
+*/
+void recvMsg(Mat &imgToRecv,int src);
+
 /** Operacion 1 Difuminado de imagenes **/
 
 /**
@@ -33,18 +64,13 @@ void join(Mat src, Mat dst,int proceso, int procesadores);
 void getKernel();
 
 /**
- * Funcion que difumina un pixel con el metodo de gauss
- * @param centerx Punto x del punto central
- * @param centery Punto y del punto central
- * @param image Imagen a la cual se aplica la difuminación
- * @param minx Minimo valor del eje x 
- * @param miny Minimo valor del eje y
+ * Funcion que difumina una imagen con el metodo de gauss
+ * @param src Imagen a la cual se aplica la difuminación
+ * @param dst Imagen destino, donde se guarda la imagen difuminada
  * @param maxx Maximo valor del eje x
  * @param maxy Maximo valor del eje y
- * @param channel Canal al que se realiza la operación "R, G o B"
- * @return Devuelve el valor para el punto central (centerx, centery)
 */
-float gauss(int centerx,int centery, Mat image,int minx, int miny, int maxx, int maxy, int channel);
+void gauss(Mat src, Mat dst, int maxx, int maxy);
 
 /** Operacion 2 Escalado de grises **/
 
@@ -52,12 +78,10 @@ float gauss(int centerx,int centery, Mat image,int minx, int miny, int maxx, int
  * Funcion transorma una imagen en RGB a escala de grises
  * @param src Imagen original a la que se hace la transformación
  * @param dst Imagen destino donde se guarda la transformación
- * @param minx Valor minimo del eje x
- * @param miny Valor minimo del eje y
  * @param maxx Valor maximo del eje x
  * @param maxy Valor maximo del eje y
 */
-void RGB2GRAYS(Mat src, Mat dst,int minx, int miny, int maxx, int maxy);
+void RGB2GRAYS(Mat src, Mat dst, int maxx, int maxy);
 
 /** Operación 3 Escalado de imagen **/
 
@@ -69,74 +93,52 @@ void RGB2GRAYS(Mat src, Mat dst,int minx, int miny, int maxx, int maxy);
 */
 int main(int argc, char** argv ){
     if(argc > 2){
-        int myrank;
-        int tag = 0;
-        int procesadores;
-        string stop("stop");
-        string ready("ready");
+        int myrank, procesadores;
         Mat img, imgsplit, newimg;
-        
-        size_t total;
-        size_t elemsize;
-        int sizes[3];
 
-        int LARGO=0;
-        MPI_Status estado;
         MPI_Init(&argc, &argv);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         MPI_Comm_size(MPI_COMM_WORLD, &procesadores);
 
+        string option(argv[1]);
+
         if(myrank == 0){
             string path = argv[2];
             img = imread(path,1);
-            int mintemp = 0, maxtemp = img.cols/procesadores;
-            rangeMin = 0;
-            rangeMax = img.cols/procesadores;
-            Mat tmpimgsplit(Size(rangeMax,img.rows), img.type());
+
+            int diferencia = img.cols/procesadores;
+
+            int mintemp = 0, maxtemp = diferencia;
+
+            Mat tmpimgsplit(Size(diferencia,img.rows), img.type());
             imgsplit = tmpimgsplit.clone();
-            copyTo(img,imgsplit,mintemp,0,maxtemp,img.rows);
+            copyTo(img,imgsplit,0,0,diferencia,img.rows);
+
             for(int p = 1; p < procesadores; p++){
-                mintemp = maxtemp;
-                maxtemp += img.cols/procesadores;
+                mintemp = diferencia*p;
+                maxtemp = diferencia*(p+1);
                 if(p+1 == procesadores){
                     maxtemp = img.cols;
                 }
                 int diference = maxtemp-mintemp;
                 Mat imgToSend(Size(diference, img.rows), img.type());
                 copyTo(img,imgToSend,mintemp,0,maxtemp,img.rows);
-                sizes[2]=imgToSend.elemSize();
-                Size s = imgToSend.size();
-                sizes[0] = s.height;
-                sizes[1] = s.width;
-                MPI_Send( sizes, 3, MPI_INT,p,0,MPI_COMM_WORLD);
-                MPI_Send( imgToSend.data, sizes[0]*sizes[1]*3, MPI_CHAR,p,1, MPI_COMM_WORLD);
+
+                sendMsg(imgToSend,p);
             }
         }
         else{
-
-            MPI_Recv( sizes,3, MPI_INT,0,0, MPI_COMM_WORLD,&estado);
-            imgsplit.create(sizes[0],sizes[1],CV_8UC3);
-            MPI_Recv( imgsplit.data, sizes[0]*sizes[1]*3, MPI_CHAR,0,1, MPI_COMM_WORLD,&estado);
-            
+            recvMsg(imgsplit,0);
         }
         newimg = imgsplit.clone();
-        if(*argv[1]== '1'){
+        if(option== "1"){
             getKernel();
-            for(int i = 0 ; i < imgsplit.rows ; i++){
-                for(int j = 0 ; j < imgsplit.cols ; j++){
-                    for(int k = 0; k < 3; k++){
-                        newimg.at<Vec3b>(i,j)[k] = gauss(j,i,imgsplit,0,0,imgsplit.cols,imgsplit.rows,k);
-                    }
-                }
-            }
+            gauss(imgsplit, newimg, imgsplit.cols, imgsplit.rows);
         }
-        else if(*argv[1]== '2'){
-            if(myrank == 0){
-                RGB2GRAYS(img, newimg, 0, 0, img.cols, img.rows);
-                saveImage(newimg,"2");
-            }
+        else if(option== "2"){
+            RGB2GRAYS(imgsplit, newimg, imgsplit.cols, imgsplit.rows);
         }
-        else if(*argv[1]== '3'){
+        else if(option== "3"){
             //saveImage(newimg,"3");
         }
         else{
@@ -147,20 +149,14 @@ int main(int argc, char** argv ){
         if(myrank==0){
             join(newimg,img,0,procesadores);
             for(int p = 1; p<procesadores; p++){
-                MPI_Recv( sizes,3, MPI_INT,p,0, MPI_COMM_WORLD,&estado);
-                Mat imgtmpjoin(sizes[0],sizes[1],CV_8UC3);
-                MPI_Recv( imgtmpjoin.data, sizes[0]*sizes[1]*3, MPI_CHAR,p,1, MPI_COMM_WORLD,&estado);
+                Mat imgtmpjoin;
+                recvMsg(imgtmpjoin,p);
                 join(imgtmpjoin,img,p,procesadores);
             }
-            saveImage(img,"test");
+            saveImage(img,option);
         }
         else{
-            sizes[2]=newimg.elemSize();
-            Size s = newimg.size();
-            sizes[0] = s.height;
-            sizes[1] = s.width;
-            MPI_Send( sizes, 3, MPI_INT,0,0,MPI_COMM_WORLD);
-            MPI_Send( newimg.data, sizes[0]*sizes[1]*3, MPI_CHAR,0,1, MPI_COMM_WORLD);
+            sendMsg(newimg, 0);
         }
 
         MPI_Finalize();
@@ -193,9 +189,8 @@ void copyTo(Mat src, Mat dst, int minx, int miny, int maxx, int maxy){
 }
 
 void join(Mat src, Mat dst,int proceso, int procesadores){
-    int diferencia = dst.cols/procesadores;
-    diferencia *= proceso;
-    for(int x = 0; x<src.cols; x++){
+    int diferencia = (dst.cols/procesadores)*proceso;
+    for(int x=0; x<dst.cols/procesadores; x++){
         for(int y = 0; y<src.rows; y++){
             dst.at<Vec3b>(y,diferencia+x)[0] = src.at<Vec3b>(y,x)[0];
             dst.at<Vec3b>(y,diferencia+x)[1] = src.at<Vec3b>(y,x)[1];
@@ -204,19 +199,56 @@ void join(Mat src, Mat dst,int proceso, int procesadores){
     }
 }
 
-float gauss(int centerx,int centery, Mat image,int minx, int miny, int maxx, int maxy, int channel){
-    float gaussBlur = 0;
-    for(int x = 0; x<5; x++){
-        if(centerx+x-2>=minx && centerx+x-2<maxx){
-            for(int y = 0; y<5; y++){
-                if(centery+y-2>=miny && centery+y-2 <maxy){
-                    gaussBlur += image.at<Vec3b>(centery+y-2,centerx+x-2)[channel]*kernel[y][x];
+void sendMsg(Mat imgToSend, int dst){
+    size_t total, elemsize;
+    int sizes[3];
+
+    sizes[2] = imgToSend.elemSize();
+    Size s = imgToSend.size();
+    sizes[0] = s.height;
+    sizes[1] = s.width;
+    MPI_Send( sizes, 3, MPI_INT,dst,0,MPI_COMM_WORLD);
+    MPI_Send( imgToSend.data, sizes[0]*sizes[1]*3, MPI_CHAR,dst,1, MPI_COMM_WORLD);
+}
+
+void recvMsg(Mat &imgToRecv,int src){
+    MPI_Status estado;
+    size_t total, elemsize;
+    int sizes[3];
+    MPI_Recv( sizes,3, MPI_INT,src,0, MPI_COMM_WORLD,&estado);
+    imgToRecv.create(sizes[0],sizes[1],CV_8UC3);
+    MPI_Recv( imgToRecv.data, sizes[0]*sizes[1]*3, MPI_CHAR,src,1, MPI_COMM_WORLD,&estado);
+}
+
+void gauss(Mat src, Mat dst, int maxx, int maxy){
+    for(int x = 0; x < maxx; x++){
+        for(int y = 0; y < maxy; y++){
+            for(int c = 0; c < 3; c++){
+                float sumGauss = 0;
+                for(int kx = -2;kx < 3; kx++){
+                    for(int ky = -2; ky < 3; ky++){
+                        if(kx+x >= 0 && kx+x < maxx){
+                            if(ky+y >= 0 && ky+y < maxy){
+                                sumGauss += src.at<Vec3b>(y+ky,x+kx)[c] * kernel[ky+2][kx+2];
+                            }
+                            else{
+                                sumGauss += src.at<Vec3b>(y,x+kx)[c] * kernel[ky+2][kx+2];
+                            }
+                        }
+                        else{
+                            if(ky+y >= 0 && ky+y < maxy){
+                                sumGauss += src.at<Vec3b>(y+ky,x)[c] * kernel[ky+2][kx+2];
+                            }
+                            else{
+                                sumGauss += src.at<Vec3b>(y,x)[c] * kernel[ky+2][kx+2];
+                            }
+                        }
+                    }
                 }
+                dst.at<Vec3b>(y,x)[c] = sumGauss;
             }
         }
-        
     }
-    return gaussBlur;
 }
 
 void getKernel(){
@@ -228,9 +260,9 @@ void getKernel(){
     }
 }
 
-void RGB2GRAYS(Mat src, Mat dst,int minx, int miny, int maxx, int maxy){
-    for(int x = minx; x < maxx; x++){
-        for(int y = miny; y < maxy; y++){
+void RGB2GRAYS(Mat src, Mat dst, int maxx, int maxy){
+    for(int x = 0; x < maxx; x++){
+        for(int y = 0; y < maxy; y++){
             float promedio = (src.at<Vec3b>(y,x)[0] + src.at<Vec3b>(y,x)[1] + src.at<Vec3b>(y,x)[2])/3;
             dst.at<Vec3b>(y,x)[0] = promedio;
             dst.at<Vec3b>(y,x)[1] = promedio;
