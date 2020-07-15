@@ -110,20 +110,19 @@ int main(int argc, char** argv ){
 
             int mintemp = 0, maxtemp = diferencia;
 
-            Mat tmpimgsplit(Size(diferencia,img.rows), img.type());
+            Mat tmpimgsplit(Size(diferencia+2,img.rows), img.type());
             imgsplit = tmpimgsplit.clone();
-            copyTo(img,imgsplit,0,0,diferencia,img.rows);
+            copyTo(img,imgsplit,0,0,diferencia+2,img.rows);
 
             for(int p = 1; p < procesadores; p++){
-                mintemp = diferencia*p;
-                maxtemp = diferencia*(p+1);
+                mintemp = (diferencia*p)-2;
+                maxtemp = (diferencia*(p+1))+2;
                 if(p+1 == procesadores){
                     maxtemp = img.cols;
                 }
                 int diference = maxtemp-mintemp;
                 Mat imgToSend(Size(diference, img.rows), img.type());
                 copyTo(img,imgToSend,mintemp,0,maxtemp,img.rows);
-
                 sendMsg(imgToSend,p);
             }
         }
@@ -190,11 +189,18 @@ void copyTo(Mat src, Mat dst, int minx, int miny, int maxx, int maxy){
 
 void join(Mat src, Mat dst,int proceso, int procesadores){
     int diferencia = (dst.cols/procesadores)*proceso;
-    for(int x=0; x<dst.cols/procesadores; x++){
+    int agregadoInicio = 0, agregadoFinal = 0;
+    if(proceso !=0){
+        agregadoInicio = 2;
+    }
+    if(proceso == procesadores-1){
+        agregadoFinal = -2;
+    }
+    for(int x=0; x<src.cols+agregadoFinal; x++){
         for(int y = 0; y<src.rows; y++){
-            dst.at<Vec3b>(y,diferencia+x)[0] = src.at<Vec3b>(y,x)[0];
-            dst.at<Vec3b>(y,diferencia+x)[1] = src.at<Vec3b>(y,x)[1];
-            dst.at<Vec3b>(y,diferencia+x)[2] = src.at<Vec3b>(y,x)[2];
+            dst.at<Vec3b>(y,diferencia+x)[0] = src.at<Vec3b>(y,x+agregadoInicio)[0];
+            dst.at<Vec3b>(y,diferencia+x)[1] = src.at<Vec3b>(y,x+agregadoInicio)[1];
+            dst.at<Vec3b>(y,diferencia+x)[2] = src.at<Vec3b>(y,x+agregadoInicio)[2];
         }
     }
 }
