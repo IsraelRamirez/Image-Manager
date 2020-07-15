@@ -16,6 +16,7 @@
         "ostream": "cpp",
         "iostream": "cpp",
         "map": "cpp",
-        "unordered_map": "cpp"
+        "unordered_map": "cpp",
+        "random": "cpp"
     }
 }
