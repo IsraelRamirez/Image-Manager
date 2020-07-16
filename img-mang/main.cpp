@@ -107,12 +107,21 @@ void RGB2GRAYS(Mat src, Mat dst, int maxx, int maxy);
 Mat scaleIMG(Mat src, float scale);
 
 /**
- * 
+ * Función que realiza una interpolación bilineal
+ * @param c00 pixel de esquina superior-izquierdo
+ * @param c10 pixel de esquina inferior-izquierdo
+ * @param c01 pixel de esquina superior-derecho
+ * @param c11 pixel de esquina inferior-derecho
+ * @return Devuelve el valor de interpolar un pixel con los 4 pixels de su subdivisión
 */
 float Blerp(float c00, float c10, float c01, float c11, float x, float y);
 
 /**
- * 
+ * Función de interpolación lineal y = y0 + (x-x0) * m
+ * @param s Es el valor de un pixel
+ * @param e Es el valor de un pixel adyacente
+ * @param t es la distancia entre ambos pixeles
+ * @return Devuelve el valor de interpolar el color de un pixel segun un cierto ponderado de distancia
 */
 float Lerp(float s, float e, float t);
 
