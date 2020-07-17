@@ -10,13 +10,61 @@
 #include <vector>
 #include <ctime>
 #include <cmath>
+#include <pthread.h>
 
 using namespace cv;
 using namespace std;
+
 /** Variables globales **/
+
+string pathDest = "/media/compartida/";
 float kernel[5][5];
 int rangeMin, rangeMax;
+Mat imgsplit, newimg;
+int NUMTHREADS = 2;
+
+/**
+ * Argumentos del hilo ejecutado
+ * @param id Id del hilo ejecutado
+ * @param option Opción elegida para la ejecución del programa
+*/
+struct t_data{
+    int id;
+    string option;
+};
+
 /** Funciones **/
+
+/**
+ * Función para inicializar un hilo de trabajo
+ * @param t_arg Argumentos/datos de un hilo
+*/
+void *init(void *t_arg);
+
+/**
+ * Función que ejecuta la opcion ingresada
+ * @param option Opción ingresada por el cliente
+ * @param indica el hilo que ejecuta la función
+*/
+void selectorOpcion(string option, int thisthread);
+
+/**
+ * Función que ejecuta la difuminación gaussiana
+ * @param indica el hilo que ejecuta la función
+*/
+void option1(int thisthread);
+
+/**
+ * Función que ejecuta el escalado de grises
+ * @param indica el hilo que ejecuta la función
+*/
+void option2(int thisthread);
+
+/**
+ * Función que ejecuta el escalado de imagen a un 2x
+ * @param indica el hilo que ejecuta la función
+*/
+void option3(int thisthread);
 
 /**
  * Funcion que guarda la imagen según un formato programa_operacion_yyyymmddHHMMss
@@ -80,10 +128,12 @@ void getKernel();
  * Funcion que difumina una imagen con el metodo de gauss
  * @param src Imagen a la cual se aplica la difuminación
  * @param dst Imagen destino, donde se guarda la imagen difuminada
+ * @param minx El mínimo valor de x que se tomará
+ * @param miny El mínimo valor de y que se tomará
  * @param maxx Maximo valor del eje x
  * @param maxy Maximo valor del eje y
 */
-void gauss(Mat src, Mat dst, int maxx, int maxy);
+void gauss(Mat src, Mat dst, int minx, int miny, int maxx, int maxy);
 
 /** Operacion 2 Escalado de grises **/
 
@@ -91,10 +141,12 @@ void gauss(Mat src, Mat dst, int maxx, int maxy);
  * Funcion transorma una imagen en RGB a escala de grises
  * @param src Imagen original a la que se hace la transformación
  * @param dst Imagen destino donde se guarda la transformación
+ * @param minx El mínimo valor de x que se tomará
+ * @param miny El mínimo valor de y que se tomará
  * @param maxx Valor maximo del eje x
  * @param maxy Valor maximo del eje y
 */
-void RGB2GRAYS(Mat src, Mat dst, int maxx, int maxy);
+void RGB2GRAYS(Mat src, Mat dst, int minx, int miny,int maxx, int maxy);
 
 /** Operación 3 Escalado de imagen **/
 
@@ -102,9 +154,12 @@ void RGB2GRAYS(Mat src, Mat dst, int maxx, int maxy);
  * Función que escala una imagen
  * @param src Imagen original a ser escalada
  * @param dst Imagen donde se guardara la imagen
- * @param scale porcentage de escalado
+ * @param minx El mínimo valor de x que se tomará
+ * @param miny El mínimo valor de y que se tomará
+ * @param maxx Valor maximo del eje x
+ * @param maxy Valor maximo del eje y
 */
-Mat scaleIMG(Mat src, float scale);
+void scaleIMG(Mat src, Mat dst, int minx, int miny,int maxx, int maxy);
 
 /**
  * Función que realiza una interpolación bilineal
@@ -132,16 +187,29 @@ float Lerp(float s, float e, float t);
  * @return resultado exitoso o fallido de la operacion
 */
 int main(int argc, char** argv ){
+    if(NUMTHREADS < 1){
+        cout<< "La cantidad de hilos a utilizar debe ser mínimo 1..."<<endl;
+        return EXIT_FAILURE;
+    }
     if(argc > 2){
         int myrank, procesadores;
-        Mat img, imgsplit;
+        Mat img;
 
+        pthread_attr_t attr;
+        void *status;
+
+        /** Inicialización de MPI **/
         MPI_Init(&argc, &argv);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         MPI_Comm_size(MPI_COMM_WORLD, &procesadores);
 
+        /** Variables usadas para el manejo de hilos **/
+        pthread_t threads[NUMTHREADS]; // Lista de los hilos ejecutados
+        struct t_data t_d[NUMTHREADS]; // Lista con los datos de los hilos
+
         string option(argv[1]);
 
+        //Separción de la imagenes a la largo de esta
         if(myrank == 0){
             string path = argv[2];
             img = imread(path, 1);
@@ -151,7 +219,7 @@ int main(int argc, char** argv ){
             int mintemp = 0, maxtemp = diferencia;
 
             Mat tmpimgsplit(Size(diferencia+agregado, img.rows), img.type());
-            imgsplit = tmpimgsplit.clone();
+            imgsplit.create( img.rows, diferencia+agregado, img.type());
             copyTo(img, imgsplit, 0, 0, diferencia + agregado, img.rows);
 
             for(int p = 1; p < procesadores; p++){
@@ -166,48 +234,84 @@ int main(int argc, char** argv ){
                 sendMsg(imgToSend, p);
             }
         }
+        // Recepción de las imagenes en los distintos procesadores
         else{
             recvMsg(imgsplit,0);
         }
+        // Creación del medio final donde se guardará la imagen procesada
         if(option == "1" || option == "2"){
+            newimg = imgsplit.clone();
+        }
+        else if(option == "3"){
+            int newcols = imgsplit.cols * 2.0;
+            int newrows = imgsplit.rows * 2.0;
+            newimg.create(newrows, newcols, CV_8UC3);
+        }
+        
+        // Declaración para hilos "joineables"
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-            Mat newimg = imgsplit.clone();
-            if(option == "1"){
-                getKernel();
-                gauss(imgsplit, newimg, imgsplit.cols, imgsplit.rows);
-            }
-            else if(option == "2"){
-                RGB2GRAYS(imgsplit, newimg, imgsplit.cols, imgsplit.rows);
+        // Inicialización de los hilos
+        for(int i = 0; i < NUMTHREADS; i++){
+            t_d[i].id = i;
+            t_d[i].option = option;
+
+            int rc = pthread_create(&threads[i], NULL, init, (void *)&t_d[i]);
+            if(rc){
+                cout << "Error:unable to create thread," << myrank<< endl;
             }
 
+        }
+
+        // Destrucción de los atributos
+        pthread_attr_destroy(&attr);
+        // Join de los hilos que han terminado sus funciones
+        for(int i = 0; i < NUMTHREADS; i++) {
+            int rc = pthread_join(threads[i], &status);
+            if (rc) {
+                cout << "Error:unable to join," << rc << endl;
+            }
+        }
+
+        // Merge de las imagenes segmentadas y procesadas para la opcion 1 y 2
+        if(option == "1" || option == "2"){
             if(myrank == 0){
                 join(newimg, img, 0, procesadores);
+
                 for(int p = 1; p < procesadores; p++){
                     Mat imgtmpjoin;
                     recvMsg(imgtmpjoin, p);
                     join(imgtmpjoin, img, p, procesadores);
                 }
+
                 saveImage(img, option);
             }
+            // Envio de las imagenes al procesador maestro
             else{
                 sendMsg(newimg, 0);
             }
         }
-        
+        // Merge de las imagenes segmentadas y procesadas para la opcion 3
         else if(option == "3"){
-            Mat tmpnewimg = scaleIMG(imgsplit, 2.0);
+
             if(myrank == 0){
-                Mat newimg(img.rows*2, img.cols*2, CV_8UC3);
-                anotherJoin(tmpnewimg, newimg, 0, procesadores);
+
+                Mat tmpnewimg(img.rows*2, img.cols*2, CV_8UC3);
+                anotherJoin(newimg, tmpnewimg, 0, procesadores);
+
                 for(int p = 1; p < procesadores; p++){
                     Mat imgtmpjoin;
                     recvMsg(imgtmpjoin, p);
-                    anotherJoin(imgtmpjoin, newimg, p, procesadores);
+                    anotherJoin(imgtmpjoin, tmpnewimg, p, procesadores);
                 }
-                saveImage(newimg, option);
+
+                saveImage(tmpnewimg, option);
+
             }
+            // Envio de las imagenes al procesador maestro
             else{
-                sendMsg(tmpnewimg, 0);
+                sendMsg(newimg, 0);
             }
         }
         else{
@@ -224,6 +328,62 @@ int main(int argc, char** argv ){
     return EXIT_SUCCESS;
 }
 
+void *init(void *t_arg){
+    struct t_data *my_data = (struct t_data *) t_arg;
+
+    selectorOpcion(my_data->option, my_data->id);
+
+    pthread_exit(NULL);
+}
+
+void selectorOpcion(string option, int thisthread){
+    if(option == "1"){ option1(thisthread); }
+    else if(option == "2"){ option2(thisthread); }
+    else if(option == "3"){ option3(thisthread); }
+}
+
+void option1(int thisthread){
+    getKernel();
+
+    int diferencia = imgsplit.rows / NUMTHREADS;
+    int minx = 0;
+    int maxx = imgsplit.cols;
+    int miny = diferencia * thisthread;
+    int maxy = diferencia * (thisthread + 1);
+
+    if(thisthread + 1 == NUMTHREADS){ maxy = imgsplit.rows; }
+
+    gauss(imgsplit, newimg, minx, miny, maxx, maxy);
+}
+
+void option2(int thisthread){
+    
+    int diferencia = imgsplit.rows / NUMTHREADS;
+    int minx = 0;
+    int maxx = imgsplit.cols;
+    int miny = diferencia * thisthread;
+    int maxy = diferencia * (thisthread + 1);
+
+    if(thisthread + 1 == NUMTHREADS){ maxy = imgsplit.rows; }
+
+    RGB2GRAYS(imgsplit, newimg, minx, miny, maxx, maxy);
+}
+
+void option3(int thisthread){
+    int newcols = imgsplit.cols * 2.0;
+    int newrows = imgsplit.rows * 2.0;
+
+    int diferencia = newrows / NUMTHREADS;
+    int minx = 0;
+    int maxx = newcols;
+    int miny = diferencia * thisthread;
+    int maxy = diferencia * (thisthread + 1);
+
+    if(thisthread + 1 == NUMTHREADS){ maxy = newrows; }
+
+    scaleIMG(imgsplit, newimg, minx, miny, maxx, maxy);
+}
+
 void saveImage(Mat image, string operation){
     time_t now = time(0);
     struct tm tstruct;
@@ -231,7 +391,7 @@ void saveImage(Mat image, string operation){
     tstruct = *localtime(&now);
     strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", &tstruct);
     string date(buf);
-    imwrite("/media/compartida/programa_"+operation+"_"+date+".png", image);
+    imwrite(pathDest+"programa_"+operation+"_"+date+".png", image);
 }
 
 void copyTo(Mat src, Mat dst, int minx, int miny, int maxx, int maxy){
@@ -275,7 +435,6 @@ void anotherJoin(Mat src, Mat dst,int proceso, int procesadores){
 }
 
 void sendMsg(Mat imgToSend, int dst){
-    size_t total, elemsize;
     int sizes[3];
 
     sizes[2] = imgToSend.elemSize();
@@ -288,22 +447,22 @@ void sendMsg(Mat imgToSend, int dst){
 
 void recvMsg(Mat &imgToRecv,int src){
     MPI_Status estado;
-    size_t total, elemsize;
+    
     int sizes[3];
     MPI_Recv( sizes,3, MPI_INT,src,0, MPI_COMM_WORLD, &estado);
     imgToRecv.create(sizes[0], sizes[1], CV_8UC3);
     MPI_Recv( imgToRecv.data, sizes[0] * sizes[1] * 3, MPI_CHAR, src, 1, MPI_COMM_WORLD, &estado);
 }
 
-void gauss(Mat src, Mat dst, int maxx, int maxy){
-    for(int x = 0; x < maxx; x++){
-        for(int y = 0; y < maxy; y++){
+void gauss(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
+    for(int x = minx; x < maxx; x++){
+        for(int y = miny; y < maxy; y++){
             for(int c = 0; c < 3; c++){
                 float sumGauss = 0;
                 for(int kx = -2;kx < 3; kx++){
                     for(int ky = -2; ky < 3; ky++){
                         if(kx+x >= 0 && kx+x < maxx){
-                            if(ky+y >= 0 && ky+y < maxy){
+                            if(ky+y >= 0 && ky+y < src.rows){
                                 sumGauss += src.at<Vec3b>(y+ky,x+kx)[c] * kernel[ky+2][kx+2];
                             }
                             else{
@@ -311,7 +470,7 @@ void gauss(Mat src, Mat dst, int maxx, int maxy){
                             }
                         }
                         else{
-                            if(ky+y >= 0 && ky+y < maxy){
+                            if(ky+y >= 0 && ky+y < src.rows){
                                 sumGauss += src.at<Vec3b>(y+ky,x)[c] * kernel[ky+2][kx+2];
                             }
                             else{
@@ -335,9 +494,9 @@ void getKernel(){
     }
 }
 
-void RGB2GRAYS(Mat src, Mat dst, int maxx, int maxy){
-    for(int x = 0; x < maxx; x++){
-        for(int y = 0; y < maxy; y++){
+void RGB2GRAYS(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
+    for(int x = minx; x < maxx; x++){
+        for(int y = miny; y < maxy; y++){
             float promedio = (src.at<Vec3b>(y,x)[0] + src.at<Vec3b>(y,x)[1] + src.at<Vec3b>(y,x)[2])/3;
             dst.at<Vec3b>(y,x)[0] = promedio;
             dst.at<Vec3b>(y,x)[1] = promedio;
@@ -346,14 +505,12 @@ void RGB2GRAYS(Mat src, Mat dst, int maxx, int maxy){
     }
 }
 
-Mat scaleIMG(Mat src, float scale){
-    int newcols = src.cols * scale;
-    int newrows = src.rows * scale;
-    Mat dst(newrows, newcols, CV_8UC3);
-    for(int x = 0; x < newcols; x++){
-        for(int y = 0; y < newrows; y++){
-            float gx = ((float)(x) / newcols) * (src.cols - 1);
-            float gy = ((float)(y) / newrows) * (src.rows - 1);
+void scaleIMG(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
+    
+    for(int x = minx; x < maxx; x++){
+        for(int y = miny; y < maxy; y++){
+            float gx = ((float)(x) / dst.cols) * (src.cols - 1);
+            float gy = ((float)(y) / dst.rows) * (src.rows - 1);
 
             int gxi = (int) gx;
             int gyi = (int) gy;
@@ -366,7 +523,6 @@ Mat scaleIMG(Mat src, float scale){
             dst.at<Vec3b>(y, x)[2] = blue;
         }
     }
-    return dst;
 }
 
 float Blerp(float c00, float c10, float c01, float c11, float x, float y){
