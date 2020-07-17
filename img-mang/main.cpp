@@ -23,6 +23,11 @@ int rangeMin, rangeMax;
 Mat imgsplit, newimg;
 int NUMTHREADS = 2;
 
+/**
+ * Argumentos del hilo ejecutado
+ * @param id Id del hilo ejecutado
+ * @param option Opción elegida para la ejecución del programa
+*/
 struct t_data{
     int id;
     string option;
@@ -30,6 +35,10 @@ struct t_data{
 
 /** Funciones **/
 
+/**
+ * Función para inicializar un hilo de trabajo
+ * @param t_arg Argumentos/datos de un hilo
+*/
 void *init(void *t_arg);
 
 /**
@@ -189,15 +198,18 @@ int main(int argc, char** argv ){
         pthread_attr_t attr;
         void *status;
 
+        /** Inicialización de MPI **/
         MPI_Init(&argc, &argv);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         MPI_Comm_size(MPI_COMM_WORLD, &procesadores);
 
-        pthread_t threads[NUMTHREADS];
-        struct t_data t_d[NUMTHREADS];
+        /** Variables usadas para el manejo de hilos **/
+        pthread_t threads[NUMTHREADS]; // Lista de los hilos ejecutados
+        struct t_data t_d[NUMTHREADS]; // Lista con los datos de los hilos
 
         string option(argv[1]);
 
+        //Separción de la imagenes a la largo de esta
         if(myrank == 0){
             string path = argv[2];
             img = imread(path, 1);
@@ -222,10 +234,11 @@ int main(int argc, char** argv ){
                 sendMsg(imgToSend, p);
             }
         }
+        // Recepción de las imagenes en los distintos procesadores
         else{
             recvMsg(imgsplit,0);
         }
-
+        // Creación del medio final donde se guardará la imagen procesada
         if(option == "1" || option == "2"){
             newimg = imgsplit.clone();
         }
@@ -235,9 +248,11 @@ int main(int argc, char** argv ){
             newimg.create(newrows, newcols, CV_8UC3);
         }
         
+        // Declaración para hilos "joineables"
         pthread_attr_init(&attr);
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
+        // Inicialización de los hilos
         for(int i = 0; i < NUMTHREADS; i++){
             t_d[i].id = i;
             t_d[i].option = option;
@@ -249,7 +264,9 @@ int main(int argc, char** argv ){
 
         }
 
+        // Destrucción de los atributos
         pthread_attr_destroy(&attr);
+        // Join de los hilos que han terminado sus funciones
         for(int i = 0; i < NUMTHREADS; i++) {
             int rc = pthread_join(threads[i], &status);
             if (rc) {
@@ -257,8 +274,8 @@ int main(int argc, char** argv ){
             }
         }
 
+        // Merge de las imagenes segmentadas y procesadas para la opcion 1 y 2
         if(option == "1" || option == "2"){
-
             if(myrank == 0){
                 join(newimg, img, 0, procesadores);
 
@@ -270,11 +287,12 @@ int main(int argc, char** argv ){
 
                 saveImage(img, option);
             }
+            // Envio de las imagenes al procesador maestro
             else{
                 sendMsg(newimg, 0);
             }
         }
-        
+        // Merge de las imagenes segmentadas y procesadas para la opcion 3
         else if(option == "3"){
 
             if(myrank == 0){
@@ -291,6 +309,7 @@ int main(int argc, char** argv ){
                 saveImage(tmpnewimg, option);
 
             }
+            // Envio de las imagenes al procesador maestro
             else{
                 sendMsg(newimg, 0);
             }
