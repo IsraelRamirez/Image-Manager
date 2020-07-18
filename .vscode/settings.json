@@ -17,6 +17,9 @@
         "iostream": "cpp",
         "map": "cpp",
         "unordered_map": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "cmath": "cpp",
+        "complex": "cpp",
+        "valarray": "cpp"
     }
 }

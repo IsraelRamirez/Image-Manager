@@ -18,7 +18,8 @@ using namespace std;
 /** Variables globales **/
 
 string pathDest = "/media/compartida/";
-float kernel[5][5];
+double kernel[5][5];
+float dev;
 int rangeMin, rangeMax;
 Mat imgsplit, newimg;
 int NUMTHREADS = 2;
@@ -120,9 +121,19 @@ void recvMsg(Mat &imgToRecv,int src);
 /** Operacion 1 Difuminado de imagenes **/
 
 /**
+ * Función que calcula el exponente de Gauss
+ * @param x posicion del punto "x"
+ * @param mu Distancia desde el punto x al centro
+ * @param sigma Desviación estandar
+ * @return Devuelve el exponente de gauss
+*/
+double gaussian (double x, double mu, double sigma);
+
+/**
  * Funcion que obtiene un kernel de tamaño 5 x 5 y lo guarda en la variable global kernel[][]
 */
 void getKernel();
+
 
 /**
  * Funcion que difumina una imagen con el metodo de gauss
@@ -240,11 +251,17 @@ int main(int argc, char** argv ){
         }
         // Creación del medio final donde se guardará la imagen procesada
         if(option == "1" || option == "2"){
+            
+            if(option == "1"){
+                dev = 6.0;
+                getKernel();
+            }
+            
             newimg = imgsplit.clone();
         }
         else if(option == "3"){
-            int newcols = imgsplit.cols * 2.0;
-            int newrows = imgsplit.rows * 2.0;
+            int newcols = imgsplit.cols * 1.13;
+            int newrows = imgsplit.rows * 1.13;
             newimg.create(newrows, newcols, CV_8UC3);
         }
         
@@ -297,7 +314,7 @@ int main(int argc, char** argv ){
 
             if(myrank == 0){
 
-                Mat tmpnewimg(img.rows*2, img.cols*2, CV_8UC3);
+                Mat tmpnewimg(img.rows*1.13, img.cols*1.13, CV_8UC3);
                 anotherJoin(newimg, tmpnewimg, 0, procesadores);
 
                 for(int p = 1; p < procesadores; p++){
@@ -343,7 +360,7 @@ void selectorOpcion(string option, int thisthread){
 }
 
 void option1(int thisthread){
-    getKernel();
+    
 
     int diferencia = imgsplit.rows / NUMTHREADS;
     int minx = 0;
@@ -370,8 +387,8 @@ void option2(int thisthread){
 }
 
 void option3(int thisthread){
-    int newcols = imgsplit.cols * 2.0;
-    int newrows = imgsplit.rows * 2.0;
+    int newcols = imgsplit.cols * 1.13;
+    int newrows = imgsplit.rows * 1.13;
 
     int diferencia = newrows / NUMTHREADS;
     int minx = 0;
@@ -463,18 +480,18 @@ void gauss(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
                     for(int ky = -2; ky < 3; ky++){
                         if(kx+x >= 0 && kx+x < maxx){
                             if(ky+y >= 0 && ky+y < src.rows){
-                                sumGauss += src.at<Vec3b>(y+ky,x+kx)[c] * kernel[ky+2][kx+2];
+                                sumGauss += (float)(src.at<Vec3b>(y+ky,x+kx)[c]) * kernel[ky+2][kx+2];
                             }
                             else{
-                                sumGauss += src.at<Vec3b>(y,x+kx)[c] * kernel[ky+2][kx+2];
+                                sumGauss += (float)(src.at<Vec3b>(y,x+kx)[c]) * kernel[ky+2][kx+2];
                             }
                         }
                         else{
                             if(ky+y >= 0 && ky+y < src.rows){
-                                sumGauss += src.at<Vec3b>(y+ky,x)[c] * kernel[ky+2][kx+2];
+                                sumGauss += (float)(src.at<Vec3b>(y+ky,x)[c]) * kernel[ky+2][kx+2];
                             }
                             else{
-                                sumGauss += src.at<Vec3b>(y,x)[c] * kernel[ky+2][kx+2];
+                                sumGauss += (float)(src.at<Vec3b>(y,x)[c]) * kernel[ky+2][kx+2];
                             }
                         }
                     }
@@ -485,13 +502,24 @@ void gauss(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
     }
 }
 
+double gaussian (double x, double mu, double sigma) {
+     return exp( -(((x-mu)/(sigma))*((x-mu)/(sigma)))/2.0 );
+}
+
 void getKernel(){
-    for(int i = 0; i<5; i++){
-        for(int j = 0; j<5; j++){
-            float expo = exp(-1*((pow(i-2,2)+pow(j-2,2))/(2*pow(1.5,2))));
-            kernel[i][j]=expo/(2*3.1416*pow(1.5,2));
-        }
-    }
+    double sum = 0;
+     // compute values
+     for (int i = 0; i < 5; i++)
+       for (int j = 0; j < 5; j++) {
+         double x = gaussian(i, 2, dev)
+                  * gaussian(j, 2, dev);
+         kernel[i][j] = x;
+         sum += x;
+       }
+
+    for (int i= 0; i < 5; i++)
+        for (int j = 0; j < 5; j++)
+            kernel[i][j] /= sum;
 }
 
 void RGB2GRAYS(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
