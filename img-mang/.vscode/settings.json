@@ -6,6 +6,9 @@
         "map": "cpp",
         "unordered_map": "cpp",
         "vector": "cpp",
-        "xstring": "cpp"
+        "xstring": "cpp",
+        "cmath": "cpp",
+        "complex": "cpp",
+        "valarray": "cpp"
     }
 }

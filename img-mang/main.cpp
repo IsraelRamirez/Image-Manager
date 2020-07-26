@@ -223,16 +223,25 @@ int main(int argc, char** argv ){
         //Separción de la imagenes a la largo de esta
         if(myrank == 0){
             string path = argv[2];
-            img = imread(path, 1);
+            img = imread(path, -1);
+            /*Mat testImg(img.rows,img.cols, CV_8UC3);
+            for(int x = 0; x<img.cols;x++){
+                for(int y = 0; y<img.rows;y++){
+                    testImg.at<Vec4b>(y,x)[0] = 100;
+                    testImg.at<Vec4b>(y,x)[1] = 0;
+                    testImg.at<Vec4b>(y,x)[2] = 100;
+                    testImg.at<Vec4b>(y,x)[3] = 255;
+                }
+            }*/
+            //saveImage(testImg, "test");
 
             int diferencia = img.cols / procesadores, agregado = 0;
             if(option == "1" || option == "2"){agregado = 2;}
             int mintemp = 0, maxtemp = diferencia;
 
-            Mat tmpimgsplit(Size(diferencia+agregado, img.rows), img.type());
-            imgsplit.create( img.rows, diferencia+agregado, img.type());
+            imgsplit.create( img.rows, diferencia+agregado, CV_8UC4);
             copyTo(img, imgsplit, 0, 0, diferencia + agregado, img.rows);
-
+            
             for(int p = 1; p < procesadores; p++){
                 mintemp = (diferencia * p) - agregado;
                 maxtemp = (diferencia * (p + 1)) + agregado;
@@ -240,20 +249,22 @@ int main(int argc, char** argv ){
                     maxtemp = img.cols;
                 }
                 int diference = maxtemp - mintemp;
-                Mat imgToSend(Size(diference, img.rows), img.type());
+                Mat imgToSend(Size(diference, img.rows), CV_8UC4);
                 copyTo(img, imgToSend, mintemp, 0, maxtemp, img.rows);
+                
                 sendMsg(imgToSend, p);
             }
         }
         // Recepción de las imagenes en los distintos procesadores
         else{
             recvMsg(imgsplit,0);
+            
         }
         // Creación del medio final donde se guardará la imagen procesada
         if(option == "1" || option == "2"){
             
             if(option == "1"){
-                dev = 6.0;
+                dev = 1.5;
                 getKernel();
             }
             
@@ -262,7 +273,7 @@ int main(int argc, char** argv ){
         else if(option == "3"){
             int newcols = imgsplit.cols * 1.13;
             int newrows = imgsplit.rows * 1.13;
-            newimg.create(newrows, newcols, CV_8UC3);
+            newimg.create(newrows, newcols, CV_8UC4);
         }
         
         // Declaración para hilos "joineables"
@@ -293,16 +304,19 @@ int main(int argc, char** argv ){
 
         // Merge de las imagenes segmentadas y procesadas para la opcion 1 y 2
         if(option == "1" || option == "2"){
+            
             if(myrank == 0){
-                join(newimg, img, 0, procesadores);
+                Mat finalimg(img.rows, img.cols, CV_8UC4);
+                join(newimg, finalimg, 0, procesadores);
 
                 for(int p = 1; p < procesadores; p++){
                     Mat imgtmpjoin;
                     recvMsg(imgtmpjoin, p);
-                    join(imgtmpjoin, img, p, procesadores);
+                    join(imgtmpjoin, finalimg, p, procesadores);
                 }
-
-                saveImage(img, option);
+                
+                    
+                saveImage(finalimg, option);
             }
             // Envio de las imagenes al procesador maestro
             else{
@@ -314,7 +328,7 @@ int main(int argc, char** argv ){
 
             if(myrank == 0){
 
-                Mat tmpnewimg(img.rows*1.13, img.cols*1.13, CV_8UC3);
+                Mat tmpnewimg(img.rows*1.13, img.cols*1.13, CV_8UC4);
                 anotherJoin(newimg, tmpnewimg, 0, procesadores);
 
                 for(int p = 1; p < procesadores; p++){
@@ -369,8 +383,9 @@ void option1(int thisthread){
     int maxy = diferencia * (thisthread + 1);
 
     if(thisthread + 1 == NUMTHREADS){ maxy = imgsplit.rows; }
-
+    
     gauss(imgsplit, newimg, minx, miny, maxx, maxy);
+    
 }
 
 void option2(int thisthread){
@@ -414,9 +429,10 @@ void saveImage(Mat image, string operation){
 void copyTo(Mat src, Mat dst, int minx, int miny, int maxx, int maxy){
     for(int x = 0; x<maxx-minx; x++){
         for(int y = 0; y<maxy-miny; y++){
-            dst.at<Vec3b>(y,x)[0] = src.at<Vec3b>(y,x+minx)[0];
-            dst.at<Vec3b>(y,x)[1] = src.at<Vec3b>(y,x+minx)[1];
-            dst.at<Vec3b>(y,x)[2] = src.at<Vec3b>(y,x+minx)[2];
+            dst.at<Vec4b>(y,x)[0] = src.at<Vec3b>(y,x+minx)[0];
+            dst.at<Vec4b>(y,x)[1] = src.at<Vec3b>(y,x+minx)[1];
+            dst.at<Vec4b>(y,x)[2] = src.at<Vec3b>(y,x+minx)[2];
+            dst.at<Vec4b>(y,x)[3] = 255;
         }
     }
 }
@@ -432,9 +448,10 @@ void join(Mat src, Mat dst,int proceso, int procesadores){
     }
     for(int x=0; x<src.cols+agregadoFinal; x++){
         for(int y = 0; y<src.rows; y++){
-            dst.at<Vec3b>(y,diferencia+x)[0] = src.at<Vec3b>(y,x+agregadoInicio)[0];
-            dst.at<Vec3b>(y,diferencia+x)[1] = src.at<Vec3b>(y,x+agregadoInicio)[1];
-            dst.at<Vec3b>(y,diferencia+x)[2] = src.at<Vec3b>(y,x+agregadoInicio)[2];
+            dst.at<Vec4b>(y,diferencia+x)[0] = src.at<Vec4b>(y,x+agregadoInicio)[0];
+            dst.at<Vec4b>(y,diferencia+x)[1] = src.at<Vec4b>(y,x+agregadoInicio)[1];
+            dst.at<Vec4b>(y,diferencia+x)[2] = src.at<Vec4b>(y,x+agregadoInicio)[2];
+            dst.at<Vec4b>(y,diferencia+x)[3] = src.at<Vec4b>(y,x+agregadoInicio)[3];
         }
     }
 }
@@ -444,9 +461,10 @@ void anotherJoin(Mat src, Mat dst,int proceso, int procesadores){
     
     for(int x=0; x<src.cols; x++){
         for(int y = 0; y<src.rows; y++){
-            dst.at<Vec3b>(y,diferencia+x)[0] = src.at<Vec3b>(y,x)[0];
-            dst.at<Vec3b>(y,diferencia+x)[1] = src.at<Vec3b>(y,x)[1];
-            dst.at<Vec3b>(y,diferencia+x)[2] = src.at<Vec3b>(y,x)[2];
+            dst.at<Vec4b>(y,diferencia+x)[0] = src.at<Vec4b>(y,x)[0];
+            dst.at<Vec4b>(y,diferencia+x)[1] = src.at<Vec4b>(y,x)[1];
+            dst.at<Vec4b>(y,diferencia+x)[2] = src.at<Vec4b>(y,x)[2];
+            dst.at<Vec4b>(y,diferencia+x)[3] = src.at<Vec4b>(y,x)[3];
         }
     }
 }
@@ -459,7 +477,7 @@ void sendMsg(Mat imgToSend, int dst){
     sizes[0] = s.height;
     sizes[1] = s.width;
     MPI_Send( sizes, 3, MPI_INT,dst,0,MPI_COMM_WORLD);
-    MPI_Send( imgToSend.data, sizes[0]*sizes[1]*3, MPI_CHAR,dst,1, MPI_COMM_WORLD);
+    MPI_Send( imgToSend.data, sizes[0]*sizes[1]*4, MPI_CHAR,dst,1, MPI_COMM_WORLD);
 }
 
 void recvMsg(Mat &imgToRecv,int src){
@@ -467,8 +485,8 @@ void recvMsg(Mat &imgToRecv,int src){
     
     int sizes[3];
     MPI_Recv( sizes,3, MPI_INT,src,0, MPI_COMM_WORLD, &estado);
-    imgToRecv.create(sizes[0], sizes[1], CV_8UC3);
-    MPI_Recv( imgToRecv.data, sizes[0] * sizes[1] * 3, MPI_CHAR, src, 1, MPI_COMM_WORLD, &estado);
+    imgToRecv.create(sizes[0], sizes[1], CV_8UC4);
+    MPI_Recv( imgToRecv.data, sizes[0] * sizes[1] * 4, MPI_CHAR, src, 1, MPI_COMM_WORLD, &estado);
 }
 
 void gauss(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
@@ -480,24 +498,25 @@ void gauss(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
                     for(int ky = -2; ky < 3; ky++){
                         if(kx+x >= 0 && kx+x < maxx){
                             if(ky+y >= 0 && ky+y < src.rows){
-                                sumGauss += (float)(src.at<Vec3b>(y+ky,x+kx)[c]) * kernel[ky+2][kx+2];
+                                sumGauss += ((float)(src.at<Vec4b>(y+ky,x+kx)[c]) * kernel[ky+2][kx+2]);
                             }
                             else{
-                                sumGauss += (float)(src.at<Vec3b>(y,x+kx)[c]) * kernel[ky+2][kx+2];
+                                sumGauss += ((float)(src.at<Vec4b>(y,x+kx)[c]) * kernel[ky+2][kx+2]);
                             }
                         }
                         else{
                             if(ky+y >= 0 && ky+y < src.rows){
-                                sumGauss += (float)(src.at<Vec3b>(y+ky,x)[c]) * kernel[ky+2][kx+2];
+                                sumGauss += ((float)(src.at<Vec4b>(y+ky,x)[c]) * kernel[ky+2][kx+2]);
                             }
                             else{
-                                sumGauss += (float)(src.at<Vec3b>(y,x)[c]) * kernel[ky+2][kx+2];
+                                sumGauss += ((float)(src.at<Vec4b>(y,x)[c]) * kernel[ky+2][kx+2]);
                             }
                         }
                     }
                 }
-                dst.at<Vec3b>(y,x)[c] = sumGauss;
+                dst.at<Vec4b>(y,x)[c] = sumGauss;
             }
+            dst.at<Vec4b>(y,x)[3] = 255;
         }
     }
 }
@@ -507,28 +526,22 @@ double gaussian (double x, double mu, double sigma) {
 }
 
 void getKernel(){
-    double sum = 0;
-     // compute values
-     for (int i = 0; i < 5; i++)
-       for (int j = 0; j < 5; j++) {
-         double x = gaussian(i, 2, dev)
-                  * gaussian(j, 2, dev);
-         kernel[i][j] = x;
-         sum += x;
-       }
-
-    for (int i= 0; i < 5; i++)
-        for (int j = 0; j < 5; j++)
-            kernel[i][j] /= sum;
+    for(int i = 0; i<5; i++){
+        for(int j = 0; j<5; j++){
+            float expo = exp(((-pow(i-2,2)-pow(j-2,2))/(2*pow(dev,2))));
+            kernel[i][j]=expo/(2*3.1416*pow(dev,2));
+        }
+    }
 }
 
 void RGB2GRAYS(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
     for(int x = minx; x < maxx; x++){
         for(int y = miny; y < maxy; y++){
-            float promedio = (src.at<Vec3b>(y,x)[0] + src.at<Vec3b>(y,x)[1] + src.at<Vec3b>(y,x)[2])/3;
-            dst.at<Vec3b>(y,x)[0] = promedio;
-            dst.at<Vec3b>(y,x)[1] = promedio;
-            dst.at<Vec3b>(y,x)[2] = promedio;
+            float promedio = (src.at<Vec4b>(y,x)[0] + src.at<Vec4b>(y,x)[1] + src.at<Vec4b>(y,x)[2])/3;
+            dst.at<Vec4b>(y,x)[0] = promedio;
+            dst.at<Vec4b>(y,x)[1] = promedio;
+            dst.at<Vec4b>(y,x)[2] = promedio;
+            dst.at<Vec4b>(y,x)[3] = 255;
         }
     }
 }
@@ -542,13 +555,14 @@ void scaleIMG(Mat src, Mat dst, int minx, int miny,int maxx, int maxy){
 
             int gxi = (int) gx;
             int gyi = (int) gy;
-            int red = Blerp(src.at<Vec3b>(gyi, gxi)[0], src.at<Vec3b>(gyi + 1, gxi)[0], src.at<Vec3b>(gyi, gxi + 1)[0], src.at<Vec3b>(gyi + 1, gxi + 1)[0], gx - gxi, gy - gyi);
-            int green = Blerp(src.at<Vec3b>(gyi, gxi)[1], src.at<Vec3b>(gyi + 1, gxi)[1], src.at<Vec3b>(gyi, gxi + 1)[1], src.at<Vec3b>(gyi + 1, gxi + 1)[1], gx - gxi, gy - gyi);
-            int blue = Blerp(src.at<Vec3b>(gyi, gxi)[2], src.at<Vec3b>(gyi + 1, gxi)[2], src.at<Vec3b>(gyi, gxi + 1)[2], src.at<Vec3b>(gyi + 1, gxi + 1)[2], gx - gxi, gy - gyi);
+            int red = Blerp(src.at<Vec4b>(gyi, gxi)[0], src.at<Vec4b>(gyi + 1, gxi)[0], src.at<Vec4b>(gyi, gxi + 1)[0], src.at<Vec4b>(gyi + 1, gxi + 1)[0], gx - gxi, gy - gyi);
+            int green = Blerp(src.at<Vec4b>(gyi, gxi)[1], src.at<Vec4b>(gyi + 1, gxi)[1], src.at<Vec4b>(gyi, gxi + 1)[1], src.at<Vec4b>(gyi + 1, gxi + 1)[1], gx - gxi, gy - gyi);
+            int blue = Blerp(src.at<Vec4b>(gyi, gxi)[2], src.at<Vec4b>(gyi + 1, gxi)[2], src.at<Vec4b>(gyi, gxi + 1)[2], src.at<Vec4b>(gyi + 1, gxi + 1)[2], gx - gxi, gy - gyi);
             
-            dst.at<Vec3b>(y, x)[0] = red;
-            dst.at<Vec3b>(y, x)[1] = green;
-            dst.at<Vec3b>(y, x)[2] = blue;
+            dst.at<Vec4b>(y, x)[0] = red;
+            dst.at<Vec4b>(y, x)[1] = green;
+            dst.at<Vec4b>(y, x)[2] = blue;
+            dst.at<Vec4b>(y, x)[3] = 255;
         }
     }
 }
