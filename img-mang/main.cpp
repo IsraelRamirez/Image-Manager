@@ -229,16 +229,6 @@ int main(int argc, char** argv ){
         if(myrank == 0){
             string path = argv[2];
             img = imread(path, -1);
-            /*Mat testImg(img.rows,img.cols, CV_8UC3);
-            for(int x = 0; x<img.cols;x++){
-                for(int y = 0; y<img.rows;y++){
-                    testImg.at<Vec4b>(y,x)[0] = 100;
-                    testImg.at<Vec4b>(y,x)[1] = 0;
-                    testImg.at<Vec4b>(y,x)[2] = 100;
-                    testImg.at<Vec4b>(y,x)[3] = 255;
-                }
-            }*/
-            //saveImage(testImg, "test");
 
             int diferencia = img.cols / procesadores, agregado = 0;
             if(option == "1" || option == "2"){agregado = 2;}
