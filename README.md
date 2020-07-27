@@ -1,5 +1,10 @@
 # Image-Manager
 ***
+##### Integrantes:
+* Victor Araya
+* Humberto Román
+* Israel Ramirez
+***
 ##### Aplicativo que usa la libreria opencv, openmpi y posix threads para el tratamiento de imagenes.
 ***
 Para esta aplicación se usó el lenguaje `c++`, junto con las librerías de `openmpi`, `opencv` y `pthreads` de posix.
