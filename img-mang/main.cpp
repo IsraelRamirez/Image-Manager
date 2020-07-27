@@ -37,6 +37,11 @@ struct t_data{
 /** Funciones **/
 
 /**
+ * Participantes del grupo de la asignatura 
+*/
+void participantes();
+
+/**
  * Función para inicializar un hilo de trabajo
  * @param t_arg Argumentos/datos de un hilo
 */
@@ -264,7 +269,7 @@ int main(int argc, char** argv ){
         if(option == "1" || option == "2"){
             
             if(option == "1"){
-                dev = 1.5;
+                dev = 0.99;
                 getKernel();
             }
             
@@ -349,7 +354,8 @@ int main(int argc, char** argv ){
             cout<<"La opcion ingresada no es valida..."<<endl;
             return EXIT_FAILURE;
         }
-
+        if(myrank == 0)
+            participantes();
         MPI_Finalize();
     }
     else{
@@ -357,6 +363,15 @@ int main(int argc, char** argv ){
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
+}
+
+void participantes(){
+    cout<<endl<<"@===Participantes====@"<<endl;
+    cout<<"@===Israel Ramirez===@"<<endl;
+    cout<<"@===Humberto Roman===@"<<endl;
+    cout<<"@===Victor Araya=====@"<<endl;
+    cout<<"@===Participantes====@"<<endl;
+
 }
 
 void *init(void *t_arg){
@@ -383,9 +398,11 @@ void option1(int thisthread){
     int maxy = diferencia * (thisthread + 1);
 
     if(thisthread + 1 == NUMTHREADS){ maxy = imgsplit.rows; }
-    
+    // Se hace 4 veces para mejor difuminación en imagenes de alta resolución
     gauss(imgsplit, newimg, minx, miny, maxx, maxy);
-    
+    gauss(newimg, newimg, minx, miny, maxx, maxy);
+    gauss(newimg, newimg, minx, miny, maxx, maxy);
+    gauss(newimg, newimg, minx, miny, maxx, maxy);
 }
 
 void option2(int thisthread){

@@ -9,6 +9,7 @@
         "xstring": "cpp",
         "cmath": "cpp",
         "complex": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "ostream": "cpp"
     }
 }
