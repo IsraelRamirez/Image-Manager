@@ -20,7 +20,7 @@ Es necesario configurar el archivo `.../img-mang/maquinas.txt` con las máquinas
 Además, se debe ejecutar `.../img-mang$ make clean && make` para la compilación del aplicativo.
 
 ***
-### Importante: 
+# Importante: 
 ##### Es posible que se encuentren problemas con el archivo de maquinas.txt, la solucioón a dicho problema es ejecutar la línea de codigo de la siguiente forma: `.../img-mang$ mpirun -host <host1>,<host2>,<host3>,...,<hostn> ./dist/programa <opción> <path de la imagen>`
 ***
 
