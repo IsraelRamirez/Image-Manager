@@ -19,6 +19,11 @@ Es necesario configurar el archivo `.../img-mang/maquinas.txt` con las máquinas
 
 Además, se debe ejecutar `.../img-mang$ make clean && make` para la compilación del aplicativo.
 
+***
+### Importante: 
+##### Es posible que se encuentren problemas con el archivo de maquinas.txt, la solucioón a dicho problema es ejecutar la línea de codigo de la siguiente forma: `.../img-mang$ mpirun -host <host1>,<host2>,<host3>,...,<hostn> ./dist/programa <opción> <path de la imagen>`
+***
+
 El aplicativo cuenta con 3 opciones para el tratamiento de imagenes:
 
 * 1.- Difuminado de imagenes, utilizando difuminado gaussian. Para su uso, utilizar la siguiente línea `.../img-mang$ mpirun --hostfile maquinas.txt ./dist/programa 1 <path de la imagen>`
